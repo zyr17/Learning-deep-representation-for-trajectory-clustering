@@ -4,7 +4,6 @@ import torch.nn as nn
 from torch.nn.utils.rnn import pad_packed_sequence
 from torch.nn.utils.rnn import pack_padded_sequence
 import os
-import constants
 
 class StackingGRUCell(nn.Module):
     """
@@ -78,7 +77,7 @@ class GlobalAttention(nn.Module):
 
 class Encoder(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers, dropout,
-                       bidirectional, embedding):
+                       bidirectional):
         """
         embedding (vocab_size, input_size): pretrained embedding
         """
@@ -88,7 +87,6 @@ class Encoder(nn.Module):
         self.hidden_size = hidden_size // self.num_directions
         self.num_layers = num_layers
 
-        self.embedding = embedding
         self.rnn = nn.GRU(input_size, self.hidden_size,
                           num_layers=num_layers,
                           bidirectional=bidirectional,
@@ -107,7 +105,7 @@ class Encoder(nn.Module):
         output (seq_len, batch, hidden_size*num_directions): output tensor
         """
         # (seq_len, batch) => (seq_len, batch, input_size)
-        embed = self.embedding(input)
+        embed = input
         lengths = lengths.data.view(-1).tolist()
         if lengths is not None:
             embed = pack_padded_sequence(embed, lengths)
@@ -117,9 +115,8 @@ class Encoder(nn.Module):
         return hn, output
 
 class Decoder(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, dropout, embedding):
+    def __init__(self, input_size, hidden_size, num_layers, dropout):
         super(Decoder, self).__init__()
-        self.embedding = embedding
         self.rnn = StackingGRUCell(input_size, hidden_size, num_layers,
                                    dropout)
         #self.attention = GlobalAttention(hidden_size)
@@ -142,9 +139,7 @@ class Decoder(nn.Module):
             especially when we feed the word one by one (i.e., seq_len=1)
             such as in translation
         """
-        assert input.dim() == 2, "The input should be of (seq_len, batch)"
-        # (seq_len, batch) => (seq_len, batch, input_size)
-        embed = self.embedding(input)
+        embed = input
         output = []
         # split along the sequence length dimension
         for e in embed.split(1):
@@ -155,28 +150,18 @@ class Decoder(nn.Module):
             o = self.dropout(o)
             output.append(o)
         output = torch.stack(output)
-        print(output.shape)
         return output, h
 
 class EncoderDecoder(nn.Module):
-    def __init__(self, vocab_size, embedding_size,
-                       hidden_size, num_layers, dropout, bidirectional):
+    def __init__(self, input_size, hidden_size, num_layers, dropout, bidirectional):
         super(EncoderDecoder, self).__init__()
-        self.vocab_size = vocab_size
-        self.embedding_size = embedding_size
-        ## the embedding shared by encoder and decoder
-        self.embedding = nn.Embedding(vocab_size, embedding_size,
-                                      padding_idx=constants.PAD)
-        self.encoder = Encoder(embedding_size, hidden_size, num_layers,
-                               dropout, bidirectional, self.embedding)
-        self.decoder = Decoder(embedding_size, hidden_size, num_layers,
-                               dropout, self.embedding)
+        self.input_size = input_size
+        self.encoder = Encoder(input_size, hidden_size, num_layers,
+                               dropout, bidirectional)
+        self.decoder = Decoder(input_size, hidden_size, num_layers,
+                               dropout)
+        self.linear = nn.Linear(hidden_size, input_size)
         self.num_layers = num_layers
-
-    def load_pretrained_embedding(path):
-        if os.path.isfile(path):
-            w = torch.load(path)
-            self.embedding.weight.data.copy_(w)
 
     def encoder_hn2decoder_h0(self, h):
         """
@@ -208,5 +193,11 @@ class EncoderDecoder(nn.Module):
         encoder_hn, H = self.encoder(src, lengths)
         decoder_h0 = self.encoder_hn2decoder_h0(encoder_hn)
         ## for target we feed the range [BOS:EOS-1] into decoder
-        output, decoder_hn = self.decoder(trg[:-1], decoder_h0, H)
+        output, decoder_hn = self.decoder(trg, decoder_h0, H)
+        output = self.linear(output)
         return output
+
+    def get_result(self, src, lengths):
+        encoder_hn, H = self.encoder(src, lengths)
+        decoder_h0 = self.encoder_hn2decoder_h0(encoder_hn).squeeze(0)
+        return decoder_h0
