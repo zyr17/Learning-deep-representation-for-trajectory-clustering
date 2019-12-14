@@ -124,6 +124,7 @@ for epoch in range(epoch + 1, args.epoch + 1):
             torch.save(savedata, filename)
             print('checkpoint %s saved. test_loss: %s' % (filename, str(all_test_loss)))
             if all_eval_loss < best_eval_loss:
+                best_eval_loss = all_eval_loss
                 torch.save(savedata, best_model_path)
                 print('best model updated')
 
