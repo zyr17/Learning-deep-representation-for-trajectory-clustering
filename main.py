@@ -65,7 +65,7 @@ if args.load_state != '':
 ite_start_time = time.time()
 for epoch in range(epoch + 1, args.epoch + 1):
     print('start epoch %4d' % epoch)
-    for length, traj in traindata:
+    for length, traj, index in traindata:
         traj = traj.transpose(0, 1)
         model.train()
         opt.zero_grad()
@@ -79,12 +79,15 @@ for epoch in range(epoch + 1, args.epoch + 1):
         def eval_data(dataset):
             all_result = []
             all_loss = []
-            for length, traj in dataset:
+            for length, traj, index in dataset:
                 traj = traj.transpose(0, 1)
                 model.train()
                 result = model(traj, length, traj)
-                output = model.get_result(traj, length)
-                all_result.append(output.cpu().detach())
+                raw_output = model.get_result(traj, length).cpu().detach()
+                output = torch.tensor(raw_output)
+                for num in range(len(raw_output)):
+                    output[index[num]] = raw_output[num]
+                all_result.append(output)
                 mask = sequence_mask(length, args.max_length).transpose(0, 1)
                 eval_loss = loss(result, traj, dim = 2) * mask
                 eval_loss = eval_loss.sum(dim=0) / length.float()

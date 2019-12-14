@@ -36,9 +36,12 @@ class TrajDataset(Dataset):
     def __getitem__(self, x):
         return self.length[x], self.trajs[x]
     def collate_fn(self, data):
+        for num, one in enumerate(data):
+            data[num] = list(one)
+            data[num].append(num)
         data.sort(key=lambda x:-x[0])
-        x, y = zip(*data)
-        return cuda(torch.stack(x)), cuda(torch.stack(y))
+        x, y, index = zip(*data)
+        return cuda(torch.stack(x)), cuda(torch.stack(y)), index
 
 def readfile(filename, batch_size, max_length, remove_or_cut = 'remove', shuffle = True, split = 0.0):
     arr = pickle.load(open(filename, 'rb'))
@@ -46,7 +49,8 @@ def readfile(filename, batch_size, max_length, remove_or_cut = 'remove', shuffle
         arr1 = []
         arr2 = []
         index = list(range(len(arr)))
-        random.shuffle(index)
+        if shuffle:
+            random.shuffle(index)
         for i in range(len(arr)):
             if index[i] < split * len(arr):
                 arr2.append(arr[i])
