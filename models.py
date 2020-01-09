@@ -158,7 +158,7 @@ class EncoderDecoder(nn.Module):
         self.input_size = input_size
         self.encoder = Encoder(input_size, hidden_size, num_layers,
                                dropout, bidirectional)
-        self.decoder = Decoder(input_size, hidden_size, num_layers,
+        self.decoder = Decoder(0, hidden_size, num_layers,
                                dropout)
         self.linear = nn.Linear(hidden_size, input_size)
         self.num_layers = num_layers

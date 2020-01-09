@@ -67,9 +67,10 @@ for epoch in range(epoch + 1, args.epoch + 1):
     print('start epoch %4d' % epoch)
     for length, traj, index in traindata:
         traj = traj.transpose(0, 1)
+        fake_input = cuda(torch.zeros((traj.shape[0], traj.shape[1], 0)).float())
         model.train()
         opt.zero_grad()
-        result = model(traj, length, traj)
+        result = model(traj, length, fake_input)
         mask = sequence_mask(length, args.max_length).transpose(0, 1)
         l = loss(result, traj, dim = 2) * mask
         l = (l.sum(dim=0) / length.float()).mean()
@@ -81,8 +82,9 @@ for epoch in range(epoch + 1, args.epoch + 1):
             all_loss = []
             for length, traj, index in dataset:
                 traj = traj.transpose(0, 1)
+                fake_input = cuda(torch.zeros((traj.shape[0], traj.shape[1], 0)).float())
                 model.train()
-                result = model(traj, length, traj)
+                result = model(traj, length, fake_input)
                 raw_output = model.get_result(traj, length).cpu().detach()
                 output = torch.tensor(raw_output)
                 for num in range(len(raw_output)):
