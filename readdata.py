@@ -26,6 +26,13 @@ class TrajDataset(Dataset):
             self.max.append(max(map(max, onedim)))
         self.min = torch.tensor(self.min)
         self.max = torch.tensor(self.max)
+        #print(self.min[0].item(), self.min[1].item(), self.max[0].item(), self.max[1].item())
+        #shanghai
+        #self.min = torch.tensor([30.90562629699707, 121.08155822753906])
+        #self.max = torch.tensor([31.45410919189453, 121.81672668457031])
+        #porto
+        self.min = torch.tensor([41.1006965637207, -8.699525833129883])
+        self.max = torch.tensor([41.19973373413086, -8.498448371887207])
         self.trajs = self.min.unsqueeze(0).unsqueeze(0).repeat(len(trajs), max_length, 1)
         for i in range(len(trajs)):
             self.trajs[i][:self.length[i]] = torch.tensor(trajs[i])

@@ -3,6 +3,9 @@ import argparse
 import time
 import pdb
 import os
+import pickle
+import numpy as np
+import time
 
 import models
 import readdata
@@ -26,8 +29,57 @@ parser.add_argument('-checkpoint', type=str, default='checkpoints')
 parser.add_argument('-load_state', type=str, default='')
 parser.add_argument('-test_when_save', type=bool, default=True)
 parser.add_argument('-save_test_result', type=bool, default=True)
+parser.add_argument('-encode_savepath', type=str, default='')
 
 args = parser.parse_args()
+
+def eval_data(dataset, process = 0):
+    all_result = []
+    all_loss = []
+    process = min(process, len(dataset))
+    for number, [length, traj, index] in enumerate(dataset):
+        traj = traj.transpose(0, 1)
+        fake_input = cuda(torch.zeros((traj.shape[0], traj.shape[1], 0)).float())
+        model.eval()
+        result = model(traj, length, fake_input)
+        raw_output = model.get_result(traj, length).cpu().detach()
+        output = torch.tensor(raw_output)
+        for num in range(len(raw_output)):
+            output[index[num]] = raw_output[num]
+        all_result.append(output)
+        mask = sequence_mask(length, args.max_length).transpose(0, 1)
+        eval_loss = loss(result, traj, dim = 2) * mask
+        eval_loss = eval_loss.sum(dim=0) / length.float()
+        all_loss.append(eval_loss.cpu().detach())
+        if process > 0 and number % (len(dataset) // process) == 0:
+            print('encoding %d / %d' % (number, len(dataset)))
+    all_result = torch.cat(all_result)
+    all_loss = torch.cat(all_loss)
+    return all_result, all_loss.mean().item()
+
+if args.encode_savepath != '':
+    start_time = time.time()
+    cp = torch.load(args.load_state)
+    c_args = cp['args']
+    c_args.load_state = args.load_state
+    c_args.encode_savepath = args.encode_savepath
+    c_args.test_data = args.test_data
+    args = c_args
+    print('checkpoint arguments loaded')
+    print(args)
+    print(time.time() - start_time)
+    #start_time = time.time()
+    testdata = readdata.readfile(args.test_data, args.batch, args.max_length, 'cut', False)
+    model = cuda(models.EncoderDecoder(2, args.hidden_size, args.layers, args.dropout, False), args.cuda)
+    model.load_state_dict(cp['state_dict'])
+    loss = MSE
+    print(time.time() - start_time)
+    #start_time = time.time()
+    all_test_result, all_test_loss = eval_data(testdata, 100)
+    all_test_result = np.array(all_test_result)
+    pickle.dump(all_test_result, open(args.encode_savepath, 'wb'))
+    print(time.time() - start_time)
+    exit()
 
 print(args)
 
@@ -42,6 +94,8 @@ traindata, evaldata = readdata.readfile(args.train_data, args.batch, args.max_le
 testdata = readdata.readfile(args.test_data, args.batch, args.max_length, 'cut', False)
 loss = MSE
 opt = torch.optim.Adam(model.parameters(), args.learning_rate)
+
+pdb.set_trace()
 
 print('train data batch:', len(traindata))
 print('evaluate data batch:', len(evaldata))
@@ -77,26 +131,6 @@ for epoch in range(epoch + 1, args.epoch + 1):
         l.backward()
         opt.step()
         iteration += 1
-        def eval_data(dataset):
-            all_result = []
-            all_loss = []
-            for length, traj, index in dataset:
-                traj = traj.transpose(0, 1)
-                fake_input = cuda(torch.zeros((traj.shape[0], traj.shape[1], 0)).float())
-                model.train()
-                result = model(traj, length, fake_input)
-                raw_output = model.get_result(traj, length).cpu().detach()
-                output = torch.tensor(raw_output)
-                for num in range(len(raw_output)):
-                    output[index[num]] = raw_output[num]
-                all_result.append(output)
-                mask = sequence_mask(length, args.max_length).transpose(0, 1)
-                eval_loss = loss(result, traj, dim = 2) * mask
-                eval_loss = eval_loss.sum(dim=0) / length.float()
-                all_loss.append(eval_loss.cpu().detach())
-            all_result = torch.cat(all_result)
-            all_loss = torch.cat(all_loss)
-            return all_result, all_loss.mean().item()
         if iteration % args.print == 0:
             model.eval()
             _, eval_loss = eval_data(evaldata)

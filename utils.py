@@ -2,12 +2,14 @@ import torch
 
 last_use_cuda = True
 
-def cuda(tensor, use_cuda = last_use_cuda):
+def cuda(tensor, use_cuda = None):
     """
     A cuda wrapper
     """
     global last_use_cuda
-    last_use_data = use_cuda
+    if use_cuda == None:
+        use_cuda = last_use_cuda
+    last_use_cuda = use_cuda
     if not use_cuda:
         return tensor
     if tensor is None:
